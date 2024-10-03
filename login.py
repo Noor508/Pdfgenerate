@@ -129,6 +129,11 @@ def main():
     if st.session_state.authenticated:
         # If authenticated, show the dashboard
         st.sidebar.subheader("Dashboard")
+        # Display a logout button
+        if st.sidebar.button("Logout"):
+            st.session_state.authenticated = False  # Reset the authentication state
+            st.success("You have been logged out.")
+            st.rerun()  # Rerun the app to refresh the state1``
         if st.sidebar.button("Dashboard"):
             st.page_link("pages/app.py" ,label="Generate your quiz")
     else:
