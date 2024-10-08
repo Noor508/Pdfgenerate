@@ -21,6 +21,7 @@ st.set_page_config(page_title="Quizify", page_icon="🧠", layout="wide")
  
 # Custom CSS for styling
 custom_css = """
+ 
     <style>
  
     [data-testid="stSidebar"] { display: none;}
@@ -101,12 +102,20 @@ def main():
             login(users)
  
  
- 
 def login(users):
-    row_input = st.columns((2,1,2,1))
+    row_input = st.columns((2, 1, 2, 1))
     with row_input[0]:
         username = st.text_input('Username')
-        password = st.text_input('Password')
+ 
+        # Password visibility toggle logic
+        if 'password_visible' not in st.session_state:
+            st.session_state.password_visible = False
+ 
+        password_type = "text" if st.session_state.password_visible else "password"
+        password = st.text_input('Password', type=password_type)
+ 
+       
+ 
         if st.button("Login"):
             if username in users and users[username] == hash_password(password):
                 with st.spinner("Verifying your credentials..."):

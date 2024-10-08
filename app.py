@@ -19,7 +19,7 @@ import requests
 import pickle
 import hashlib
 import datetime
- 
+
 load_dotenv()
  
 api_key = os.environ.get("API_KEY")
@@ -29,6 +29,21 @@ GLOBAL_QUIZ_RESULTS_FILE= 'user_data.pkl'
  
 QUIZ_DATA_PICKLE_FILE = "quiz_data.pkl"
 
+# Initialize session state for user authentication
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+if "username" not in st.session_state:
+    st.session_state.username = None
+
+# Check if user is authenticated
+if not st.session_state.authenticated:
+    st.warning("You need to log in to access this page.")
+    if st.button("Go to Login"):
+        # Set a flag to show the login interface
+        st.session_state.show_login = True
+    st.stop()
+
+
 def load_quiz_data():
     try:
         with open(QUIZ_DATA_PICKLE_FILE, 'rb') as f:
@@ -37,12 +52,7 @@ def load_quiz_data():
         return {}
     
     
-def load_global_results():
-    try:
-        with open(GLOBAL_QUIZ_RESULTS_FILE, 'rb') as f:
-            return pickle.load(f)
-    except (FileNotFoundError, EOFError):
-        return {}
+
     
     
 
@@ -91,6 +101,8 @@ class List_of_MCQs(BaseModel):
     mcqs: List[MCQ]
  
 # Initialize session state
+if "username" not in st.session_state:
+    st.session_state.username = None
 if "current_text" not in st.session_state:
     st.session_state.current_text = ""
 if "current_question" not in st.session_state:
@@ -298,7 +310,6 @@ with tab1:
  
             st.write(f"**Question {current_question + 1}:** {mcq['question']}")
             selected_option = st.radio("Select an option:", mcq['options'], key=f"question_{current_question}")
-            st.write("Score:", st.session_state.score)
  
             if st.button("Submit") and not st.session_state.show_feedback:
                 st.session_state.selected_option = selected_option
@@ -319,8 +330,7 @@ with tab1:
                 st.session_state.show_feedback = False
                 st.session_state.selected_option = None
                 st.rerun()
-        else:
-            st.write(f"Quiz completed! Your score is {st.session_state.score} out of {len(all_mcqs)}.")
+        
     else:
         st.write("Please upload a PDF file to generate MCQs.")
  
@@ -378,6 +388,8 @@ with tab3:
  
 with tab4:
     st.header("User Profile")
+    
+    
  
     username = st.session_state.get('username')
     user_results = load_user_results().get(username, [])
@@ -417,16 +429,7 @@ with tab5:
     else:
         st.write("No local quiz results available.")
 
-    # Global History
-    st.subheader("Global History (All Quizzes)")
-    global_results = load_global_results()  # Load global results
-    
-    if global_results:
-        for user, results in global_results.items():
-            for quiz_title, score, timestamp in results:
-                st.write(f"**User:** {user}, **Quiz Title:** {quiz_title}, **Score:** {score}, **Date:** {timestamp}")
-    else:
-        st.write("No global quiz results available.")
+
 
         
         
