@@ -1,3 +1,4 @@
+ 
 import pickle
 import hashlib
  
@@ -12,4 +13,3 @@ def create_user_database():
         pickle.dump(users, f)
  
 create_user_database()  # Run this once to create the database
- 
