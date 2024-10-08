@@ -480,20 +480,7 @@ def show_dashboard():
             st.write(f"Welcome, {username}!")
             for quiz_title, score, timestamp in user_results:
                 st.write(f"**Quiz Title:** {quiz_title}, **Score:** {score}, **Date:** {timestamp}")
-    
-    
-            # Add a button to retake the quiz
-            if st.button("Retake Last Quiz"):
-                # Reset session state variables for the quiz
-                st.session_state.current_question = 0
-                st.session_state.score = 0
-                st.session_state.show_feedback = False
-                st.session_state.selected_option = None
-                st.session_state.selected_answers = []
-                st.session_state.all_mcqs = []  # Clear previous MCQs
-    
-                st.success("Quiz reset! You can start the quiz again.")
-                st.rerun()  # Rerun the app to go back to quiz tab
+
         else:
             st.write("No quiz results available.")
             
