@@ -255,34 +255,38 @@ with tab1:
     if st.session_state.all_mcqs:
         all_mcqs = st.session_state.all_mcqs
         current_question = st.session_state.current_question
- 
+   
         if current_question < len(all_mcqs):
             mcq = all_mcqs[current_question]
  
             st.write(f"**Question {current_question + 1}:** {mcq['question']}")
             selected_option = st.radio("Select an option:", mcq['options'], key=f"question_{current_question}")
+            #st.write("Score:", st.session_state.score) to check score on screen
  
-            if st.button("Submit"):
+            if st.button("Submit") and not st.session_state.show_feedback:
                 st.session_state.selected_option = selected_option
                 st.session_state.selected_answers.append(selected_option)  # Store the selected answer
                 st.session_state.show_feedback = True
  
-            if st.session_state.show_feedback:
+                # Check the answer and update score only once per question
                 if st.session_state.selected_option == mcq['answer']:
                     st.success("Correct!")
                     st.session_state.score += 1
                 else:
                     st.error(f"Wrong! The correct answer is: {mcq['answer']}")
  
-                if st.button("Next"):
-                    st.session_state.current_question += 1
-                    st.session_state.show_feedback = False
-                    st.session_state.selected_option = None
-                    st.rerun()
+        # Show "Next" button only after feedback is shown
+        if st.session_state.show_feedback:
+            if st.button("Next"):
+                st.session_state.current_question += 1
+                st.session_state.show_feedback = False
+                st.session_state.selected_option = None
+                st.rerun()
         else:
             st.write(f"Quiz completed! Your score is {st.session_state.score} out of {len(all_mcqs)}.")
     else:
         st.write("Please upload a PDF file to generate MCQs.")
+ 
  
 with tab2:
     st.header("YouTube Link Quiz")
@@ -326,6 +330,7 @@ with tab3:
             st.write(f"**Your Answer:** {selected_answer}")
             st.write(f"**Correct Answer:** {correct_answer}\n")
  
+ 
         # Save the results for the user
         username = st.session_state.get('username')  
         if uploaded_file:
@@ -345,6 +350,7 @@ with tab4:
         for quiz_title, score, timestamp in user_results:
             st.write(f"**Quiz Title:** {quiz_title}, **Score:** {score}, **Date:** {timestamp}")
  
+ 
         # Add a button to retake the quiz
         if st.button("Retake Last Quiz"):
             # Reset session state variables for the quiz
@@ -359,6 +365,3 @@ with tab4:
             st.rerun()  # Rerun the app to go back to quiz tab
     else:
         st.write("No quiz results available.")
- 
- 
- 
