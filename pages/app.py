@@ -25,7 +25,44 @@ load_dotenv()
 api_key = os.environ.get("API_KEY")
 endpoint = os.environ.get("END_POINT")
 QUIZ_PICKLE_FILE = "quiz_data.pkl"
+GLOBAL_QUIZ_RESULTS_FILE= 'user_data.pkl'
  
+QUIZ_DATA_PICKLE_FILE = "quiz_data.pkl"
+
+def load_quiz_data():
+    try:
+        with open(QUIZ_DATA_PICKLE_FILE, 'rb') as f:
+            return pickle.load(f)
+    except (FileNotFoundError, EOFError):
+        return {}
+    
+    
+def load_global_results():
+    try:
+        with open(GLOBAL_QUIZ_RESULTS_FILE, 'rb') as f:
+            return pickle.load(f)
+    except (FileNotFoundError, EOFError):
+        return {}
+    
+    
+
+def save_quiz_data(quiz_data):
+    with open(QUIZ_DATA_PICKLE_FILE, 'wb') as f:
+        pickle.dump(quiz_data, f)
+        
+
+def save_user_results(username, quiz_title, score):
+    quiz_data = load_quiz_data()
+    
+    # Update user-specific results
+    if username not in quiz_data:
+        quiz_data[username] = []
+    quiz_data[username].append((quiz_title, score, datetime.datetime.now().isoformat()))
+
+    # Save the updated results
+    save_quiz_data(quiz_data)
+    
+    
 # Function to save MCQs to a pickle file
 def save_quiz_to_pickle(mcqs, filename):
     with open(filename, 'wb') as f:
@@ -197,7 +234,7 @@ def calculate_checksum_from_string(input_string):
  
 st.title("PDF and YouTube Quiz Generator")
  
-tab1, tab2, tab3, tab4 = st.tabs(["PDF to MCQs", "YouTube Link Quiz", "Quiz Results", "User Profile"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["PDF to MCQs", "YouTube Link Quiz", "Quiz Results", "User Profile", "History"])
  
 with tab1:
     st.header("PDF to MCQs")
@@ -261,7 +298,7 @@ with tab1:
  
             st.write(f"**Question {current_question + 1}:** {mcq['question']}")
             selected_option = st.radio("Select an option:", mcq['options'], key=f"question_{current_question}")
-            #st.write("Score:", st.session_state.score) to check score on screen
+            st.write("Score:", st.session_state.score)
  
             if st.button("Submit") and not st.session_state.show_feedback:
                 st.session_state.selected_option = selected_option
@@ -365,3 +402,34 @@ with tab4:
             st.rerun()  # Rerun the app to go back to quiz tab
     else:
         st.write("No quiz results available.")
+        
+with tab5:
+    st.header("History")
+
+    # Local History
+    st.subheader("Local History (Your Quizzes)")
+    username = st.session_state.get('username')
+    user_results = load_user_results().get(username, [])
+
+    if user_results:
+        for quiz_title, score, timestamp in user_results: 
+            st.write(f"**Quiz Title:** {quiz_title}, **Score:** {score}, **Date:** {timestamp}")
+    else:
+        st.write("No local quiz results available.")
+
+    # Global History
+    st.subheader("Global History (All Quizzes)")
+    global_results = load_global_results()  # Load global results
+    
+    if global_results:
+        for user, results in global_results.items():
+            for quiz_title, score, timestamp in results:
+                st.write(f"**User:** {user}, **Quiz Title:** {quiz_title}, **Score:** {score}, **Date:** {timestamp}")
+    else:
+        st.write("No global quiz results available.")
+
+        
+        
+        
+ 
+        
