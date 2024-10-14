@@ -329,20 +329,20 @@ def get_chat_completion(messages):
  
 # Main Application Logic
 def main():
+    # Sidebar for API configuration
     with st.sidebar:
-   # Add configuration section
         st.subheader("Configuration")
         api_key = st.text_input("Enter API Key:", type="password")
         endpoint = st.text_input("Enter API Endpoint:")
-         
+        
         if st.button("Save API Settings"):
             st.session_state.api_key = api_key
             st.session_state.endpoint = endpoint
             st.success("API settings saved successfully!")
         
         # Use the stored API key and endpoint for further requests
-        api_key = st.session_state.api_key
-        endpoint = st.session_state.endpoint
+        api_key = st.session_state.get('api_key')
+        endpoint = st.session_state.get('endpoint')
 
         if api_key and endpoint:
             headers = {
@@ -351,26 +351,27 @@ def main():
             }
        
         show_user_guide()
- 
- 
+
     users = load_users()  # Load users from pickle file
- 
+
     st.markdown("<h1 class='big-font'>Welcome to Quizify</h1>", unsafe_allow_html=True)
     st.markdown("<p class='subtitle'>Embark on a journey of knowledge with AI-generated quizzes!</p>", unsafe_allow_html=True)
- 
+
     # Initialize session state for authentication
     if 'authenticated' not in st.session_state:
         st.session_state.authenticated = False
- 
+
     if st.session_state.authenticated:
         show_dashboard()
     else:
         # Toggle form between login and signup
         if 'show_login' not in st.session_state:
             st.session_state.show_login = True
- 
+
         if st.session_state.show_login:
             login(users)
+
+
            
            
 def login(users):
@@ -414,8 +415,15 @@ def show_dashboard():
         st.success("You have been logged out.")
         st.rerun()  # Rerun the app to show the login/signup form again
  
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["PDF to MCQs", "YouTube Link Quiz", "Quiz Results", "User Profile", "History"])
- 
+    tab1, tab3, tab4, tab5 = st.tabs(["PDF to MCQs",  "Quiz Results", "User Profile", "History"])
+    if 'current_question' not in st.session_state:
+        st.session_state.current_question = 0
+    if 'score' not in st.session_state:
+        st.session_state.score = 0
+    if 'selected_answers' not in st.session_state:
+        st.session_state.selected_answers = []
+    if 'show_feedback' not in st.session_state:
+        st.session_state.show_feedback = False
     with tab1:
         st.header("PDF to MCQs")
  
@@ -466,7 +474,7 @@ def show_dashboard():
  
                             # Append new MCQs to the existing list and save
                             all_mcqs.extend(new_mcqs)
-                            st.session_state.all_mcqs = all_mcqs  # Update session state with all MCQs
+                            st.session_state.all_mcqs = list({mcq['question']: mcq for mcq in (all_mcqs + new_mcqs)}.values())
  
                             save_quiz_to_pickle(all_mcqs, QUIZ_PICKLE_FILE)
                             st.success("Generated and saved MCQs.")
@@ -521,92 +529,85 @@ def show_dashboard():
             st.write("Please upload a PDF file to generate MCQs.")
             print("No MCQs available. Prompting user to upload a PDF.")
 
-    with tab2:
-        st.header("YouTube Link Quiz")
-        youtube_url = st.text_input("Enter YouTube video URL:")
+    # with tab2:
+    #     st.header("YouTube Link Quiz")
+    #     youtube_url = st.text_input("Enter YouTube video URL:")
 
-        if youtube_url:
-            video_checksum = calculate_checksum_from_string(youtube_url)
-            all_mcqs = load_quiz_from_pickle(QUIZ_PICKLE_FILE)
+    #     if youtube_url:
+    #         video_checksum = calculate_checksum_from_string(youtube_url)
+    #         all_mcqs = load_quiz_from_pickle(QUIZ_PICKLE_FILE)
 
-            existing_mcqs = [mcq for mcq in all_mcqs if mcq.get('checksum') == video_checksum]
-            if existing_mcqs:
-                st.warning("MCQs for this YouTube video already exist.")
-                st.session_state.all_mcqs = existing_mcqs
+    #         existing_mcqs = [mcq for mcq in all_mcqs if mcq.get('checksum') == video_checksum]
+    #         if existing_mcqs:
+    #             st.warning("MCQs for this YouTube video already exist.")
+    #             st.session_state.all_mcqs = existing_mcqs
 
-                if 'quiz_ready_to_attempt' not in st.session_state:
-                    st.toast("Quiz is ready to attempt")
-                    st.session_state.quiz_ready_to_attempt = True
+    #             if 'quiz_ready_to_attempt' not in st.session_state:
+    #                 st.toast("Quiz is ready to attempt")
+    #                 st.session_state.quiz_ready_to_attempt = True
 
-            else:
-                transcript_text = get_transcript(youtube_url)
-                if transcript_text:
-                    st.session_state.current_text = transcript_text
-                    new_mcqs = generate_mcqs_from_text(transcript_text)
-                    if new_mcqs:
-                        for mcq in new_mcqs:
-                            mcq['checksum'] = video_checksum
+    #         else:
+    #             transcript_text = get_transcript(youtube_url)
+    #             if transcript_text:
+    #                 st.session_state.current_text = transcript_text
+    #                 new_mcqs = generate_mcqs_from_text(transcript_text)
+    #                 if new_mcqs:
+    #                     for mcq in new_mcqs:
+    #                         mcq['checksum'] = video_checksum
 
-                        all_mcqs.extend(new_mcqs)
-                        st.session_state.all_mcqs = all_mcqs
-                        save_quiz_to_pickle(all_mcqs, QUIZ_PICKLE_FILE)
-                        st.success("Generated and saved MCQs for the YouTube video.")
-                    else:
-                        st.error("No MCQs were generated from the link.")
+    #                     all_mcqs.extend(new_mcqs)
+    #                     st.session_state.all_mcqs = all_mcqs
+    #                     save_quiz_to_pickle(all_mcqs, QUIZ_PICKLE_FILE)
+    #                     st.success("Generated and saved MCQs for the YouTube video.")
+    #                 else:
+    #                     st.error("No MCQs were generated from the link.")
 
-        # Quiz functionality
-        if 'all_mcqs' in st.session_state and st.session_state.all_mcqs:
-            all_mcqs = st.session_state.all_mcqs
-            current_question = st.session_state.get('current_question', 0)
-            score = st.session_state.get('score', 0)
-            selected_answers = st.session_state.get('selected_answers', [])
-            show_feedback = st.session_state.get('show_feedback', False)
+    # # # # Quiz functionality
+    # # if 'all_mcqs' in st.session_state and st.session_state.all_mcqs:
+    # #     all_mcqs = st.session_state.all_mcqs
+    # #     current_question = st.session_state.current_question
 
-            if current_question < len(all_mcqs):
-                mcq = all_mcqs[current_question]
+    # #     if current_question < len(all_mcqs):
+    # #         mcq = all_mcqs[current_question]
 
-                st.write(f"**Question {current_question + 1}:** {mcq['question']}")
-                selected_option = st.radio(
-                    "Select an option:",
-                    mcq['options'],
-                    key=f"question_{current_question}_{st.session_state.username}"  # Unique key
-                )
+    # #         st.write(f"**Question {current_question + 1}:** {mcq['question']}")
+    # #         selected_option = st.radio(
+    # #             "Select an option:",
+    # #             mcq['options'],
+    # #             key=f"question_{current_question}_{st.session_state.username}"
+    # #         )
 
-                if st.button("Submit", key=f"submit_button_{current_question}_{st.session_state.username}") and not show_feedback:
-                    st.session_state.selected_option = selected_option
-                    selected_answers.append(selected_option)  # Store the selected answer
-                    st.session_state.selected_answers = selected_answers
-                    show_feedback = True
-                    st.session_state.show_feedback = show_feedback
+    # #         if st.button("Submit", key=f"submit_button_{current_question}_{st.session_state.username}") and not st.session_state.show_feedback:
+    # #             st.session_state.selected_answers.append(selected_option)
+    # #             st.session_state.show_feedback = True
 
-                    # Check the answer and update score
-                    if selected_option == mcq['answer']:
-                        st.success("Correct!")
-                        score += 1
-                    else:
-                        st.error(f"Wrong! The correct answer is: {mcq['answer']}")
+    # #             # Update score
+    # #             if selected_option == mcq['answer']:
+    # #                 st.success("Correct!")
+    # #                 st.session_state.score += 1
+    # #             else:
+    # #                 st.error(f"Wrong! The correct answer is: {mcq['answer']}")
 
-                    st.session_state.score = score
+    # #         # Show "Next" button only after feedback is shown
+    # #         if st.session_state.show_feedback:
+    # #             if st.button("Next", key=f"next_button_{current_question}_{st.session_state.username}"):
+    # #                 st.session_state.current_question += 1
+    # #                 st.session_state.show_feedback = False
+    # #                 st.session_state.selected_option = None
+    # #                 st.session_state.selected_answers = st.session_state.selected_answers
+    # #                 st.rerun()  # Use experimental_rerun instead of rerun
 
-                # Show "Next" button only after feedback is shown
-                if show_feedback:
-                    if st.button("Next", key=f"next_button_{current_question}_{st.session_state.username}") and current_question < len(all_mcqs) - 1:
-                        st.session_state.current_question += 1
-                        st.session_state.show_feedback = False
-                        st.session_state.selected_option = None
-                        st.session_state.selected_answers = selected_answers
-                        st.rerun()
+    # #         # Show "Finish Quiz" button when on the last question
+    # #         if current_question == len(all_mcqs) - 1:
+    # #             if st.button("Finish Quiz", key=f"finish_button_{st.session_state.username}"):
+    # #                 handle_quiz_completion(st.session_state.username, "YouTube Quiz", st.session_state.score)
+    # #                 st.session_state.current_question += 1  # Optional, depending on your flow
+    # #                 st.session_state.show_feedback = False
+    # #                 st.session_state.selected_option = None
+    # #                 st.rerun()
+    # #     else:
+    # #         st.write("No questions available. Please generate MCQs from a YouTube video.")
 
-                    # Show "Finish Quiz" button when on the last question
-                    if current_question == len(all_mcqs) - 1:
-                        if st.button("Finish Quiz", key=f"finish_button_{st.session_state.username}"):
-                            handle_quiz_completion(st.session_state.username, "YouTube Quiz", score)
-                            st.session_state.current_question += 1
-                            st.session_state.show_feedback = False
-                            st.session_state.selected_option = None
-                            st.rerun()
-            else:
-                st.write("No questions available. Please generate MCQs from a YouTube video.")
 
 
     with tab3:
