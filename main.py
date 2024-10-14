@@ -35,9 +35,20 @@ import datetime
 from datetime import datetime
 import pandas as pd
  
- 
-# Set page configuration
 st.set_page_config(page_title="Quizify", page_icon="🧠", layout="wide")
+
+ 
+ # Initialize session state for user authentication and API settings
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+if "username" not in st.session_state:
+    st.session_state.username = None
+if "api_key" not in st.session_state:
+    st.session_state.api_key = None
+if "endpoint" not in st.session_state:
+    st.session_state.endpoint = None
+
+
  
 # Custom CSS for styling
 custom_css = """
@@ -57,8 +68,7 @@ st.markdown(custom_css, unsafe_allow_html=True)
 st.markdown(custom_css, unsafe_allow_html=True)
  
  
-api_key = st.session_state.get('api_key', None)
-endpoint = st.session_state.get('endpoint', None)
+
  
 # Update file paths to include the Data folder
 DATA_FOLDER = "Data"  # Specify your data folder here
@@ -115,16 +125,18 @@ def show_user_guide():
     If you encounter issues uploading files or generating quizzes, ensure that the PDF is not corrupted and that the YouTube URL is valid.
     For any technical issues, consider refreshing the page or checking your internet connection.
     """)
- 
 def save_user_results_login(username, quiz_title, score):
     try:
-        user_results = load_user_results()  # Load existing results
-        # Append new result for the user with a timestamp
+        user_results = load_user_results(username)  # Load existing results for the user
+        # Store the result, overwriting any existing result for the same quiz title
         if username not in user_results:
-            user_results[username] = []
-        user_results[username].append((quiz_title, score, datetime.datetime.now().isoformat()))
+            user_results[username] = {}
+        user_results[username][quiz_title] = (score, datetime.datetime.now().isoformat())
+        
+        save_users(user_results)  # Save back to file
     except Exception as e:
         print(f"Error saving user results: {e}")
+
    
  
 # Function to load user quiz results from the pickle file
@@ -201,12 +213,20 @@ def load_quiz_from_pickle(filename):
     try:
         with open(filename, 'rb') as f:
             return pickle.load(f)
-    except (FileNotFoundError, EOFError):
+    except FileNotFoundError:
+        print("File not found. Please ensure the filename is correct.")
         return []
+    except EOFError:
+        print("End of file reached unexpectedly. The file might be empty or corrupted.")
+        return []
+    except pickle.UnpicklingError as e:
+        print(f"Error unpickling the file: {e}")
+        return []
+
  
 headers = {
     'Content-Type': 'application/json',
-    'api-key': api_key
+    'api-key': st.session_state.api_key
 }
  
  
@@ -297,7 +317,7 @@ def get_chat_completion(messages):
         "response_format": {"type": "json_object"}
     }
  
-    response = requests.post(endpoint, headers=headers, data=json.dumps(data))
+    response = requests.post(st.session_state.endpoint, headers=headers, data=json.dumps(data))
     print("get response",response)
  
     if response.status_code == 200:
@@ -314,20 +334,21 @@ def main():
         st.subheader("Configuration")
         api_key = st.text_input("Enter API Key:", type="password")
         endpoint = st.text_input("Enter API Endpoint:")
-       
-        if st.button("Save Configuration"):
-                if api_key and endpoint:
-                    # Save API Key and Endpoint to session state
-                    st.session_state.api_key = api_key
-                    st.session_state.endpoint = endpoint
-                   
-                    # Optionally save to .env file
-                    set_key(".env", "AZURE_API_KEY", api_key)
-                    set_key(".env", "API_ENDPOINT", endpoint)
-                   
-                    st.success("Configuration saved!")
-                else:
-                    st.error("Please enter both API Key and Endpoint.")
+         
+        if st.button("Save API Settings"):
+            st.session_state.api_key = api_key
+            st.session_state.endpoint = endpoint
+            st.success("API settings saved successfully!")
+        
+        # Use the stored API key and endpoint for further requests
+        api_key = st.session_state.api_key
+        endpoint = st.session_state.endpoint
+
+        if api_key and endpoint:
+            headers = {
+                'Content-Type': 'application/json',
+                'api-key': api_key
+            }
        
         show_user_guide()
  
@@ -383,8 +404,6 @@ def handle_quiz_completion(username, quiz_title, score):
     st.success(f"Your score for {quiz_title} has been saved.")
  
  
-api_key = st.session_state.get('api_key', None)
-endpoint = st.session_state.get('endpoint', None)
  
 def show_dashboard():
     st.success("Welcome back! You're now logged in.")
@@ -398,33 +417,7 @@ def show_dashboard():
     tab1, tab2, tab3, tab4, tab5 = st.tabs(["PDF to MCQs", "YouTube Link Quiz", "Quiz Results", "User Profile", "History"])
  
     with tab1:
-        def validate_api_key(api_key, endpoint):
-            if not api_key or not endpoint:
-                print("API key or endpoint not found!")
-                return False
- 
-            headers1 = {"Authorization": f"Bearer {api_key}"}  # Ensure you are passing the API key correctly
-            try:
-                print(f"Requesting {endpoint} with headers: {headers1}")  # Log the request details
-                response = requests.get(endpoint, headers=headers1)
-                print(f"Response Status Code: {response.status_code}")
-                print(f"Response Body: {response.text}")  # Print response body for debugging
- 
-                if response.status_code == 200:
-                    print("API key validated successfully.")
-                    return True
-                else:
-                    print(f"API key validation failed. Status Code: {response.status_code}")
-                    return False
-            except requests.exceptions.RequestException as e:
-                print(f"Error during API validation: {e}")
-                return False
- 
- 
         st.header("PDF to MCQs")
- 
-        AZURE_API_KEY = st.session_state.get('api_key', None)
-        API_ENDPOINT = st.session_state.get('endpoint', None)
  
         # Uploaded file input
         uploaded_file = st.file_uploader("Upload a PDF file", type=["pdf"])
@@ -456,24 +449,7 @@ def show_dashboard():
                     st.session_state.quiz_ready_to_attempt = True
  
             else:
-                # If not, validate the Azure API key before processing
-                if not AZURE_API_KEY:
-                    st.error("API key not found! Please make sure it's set in sidebar")
-                    quiz_title = None
-                    st.session_state.api_validation_status = False  # Invalid API status
-                    st.session_state.all_mcqs = []  # Reset to empty
-                    print("API key not found.")
-                else:
-                    # Validate API key
-                    if not validate_api_key(AZURE_API_KEY,API_ENDPOINT):  # Ensure you have this function defined
-                        quiz_title = None
-                        st.error("Invalid API key. Please provide a valid key.")
-                        st.session_state.api_validation_status = False  # Invalid API status
-                        st.session_state.all_mcqs = []  # Reset to empty
-                    else:
-                        st.session_state.api_validation_status = True  # API key is valid
- 
-                        # Proceed to save the uploaded file and generate new MCQs
+                 # Proceed to save the uploaded file and generate new MCQs
                         with open("uploaded_file.pdf", "wb") as f:
                             f.write(file_bytes)
  
@@ -544,47 +520,111 @@ def show_dashboard():
         else:
             st.write("Please upload a PDF file to generate MCQs.")
             print("No MCQs available. Prompting user to upload a PDF.")
-   
+
     with tab2:
         st.header("YouTube Link Quiz")
         youtube_url = st.text_input("Enter YouTube video URL:")
-   
+
         if youtube_url:
             video_checksum = calculate_checksum_from_string(youtube_url)
             all_mcqs = load_quiz_from_pickle(QUIZ_PICKLE_FILE)
-   
+
             existing_mcqs = [mcq for mcq in all_mcqs if mcq.get('checksum') == video_checksum]
             if existing_mcqs:
                 st.warning("MCQs for this YouTube video already exist.")
                 st.session_state.all_mcqs = existing_mcqs
+
+                if 'quiz_ready_to_attempt' not in st.session_state:
+                    st.toast("Quiz is ready to attempt")
+                    st.session_state.quiz_ready_to_attempt = True
+
             else:
                 transcript_text = get_transcript(youtube_url)
                 if transcript_text:
                     st.session_state.current_text = transcript_text
                     new_mcqs = generate_mcqs_from_text(transcript_text)
-                    for mcq in new_mcqs:
-                        mcq['checksum'] = video_checksum
-   
-                    all_mcqs.extend(new_mcqs)
-                    st.session_state.all_mcqs = new_mcqs
-                    save_quiz_to_pickle(all_mcqs, QUIZ_PICKLE_FILE)
-                    st.success("Generated and saved MCQs for the YouTube video.")
+                    if new_mcqs:
+                        for mcq in new_mcqs:
+                            mcq['checksum'] = video_checksum
+
+                        all_mcqs.extend(new_mcqs)
+                        st.session_state.all_mcqs = all_mcqs
+                        save_quiz_to_pickle(all_mcqs, QUIZ_PICKLE_FILE)
+                        st.success("Generated and saved MCQs for the YouTube video.")
+                    else:
+                        st.error("No MCQs were generated from the link.")
+
+        # Quiz functionality
+        if 'all_mcqs' in st.session_state and st.session_state.all_mcqs:
+            all_mcqs = st.session_state.all_mcqs
+            current_question = st.session_state.get('current_question', 0)
+            score = st.session_state.get('score', 0)
+            selected_answers = st.session_state.get('selected_answers', [])
+            show_feedback = st.session_state.get('show_feedback', False)
+
+            if current_question < len(all_mcqs):
+                mcq = all_mcqs[current_question]
+
+                st.write(f"**Question {current_question + 1}:** {mcq['question']}")
+                selected_option = st.radio(
+                    "Select an option:",
+                    mcq['options'],
+                    key=f"question_{current_question}_{st.session_state.username}"  # Unique key
+                )
+
+                if st.button("Submit", key=f"submit_button_{current_question}_{st.session_state.username}") and not show_feedback:
+                    st.session_state.selected_option = selected_option
+                    selected_answers.append(selected_option)  # Store the selected answer
+                    st.session_state.selected_answers = selected_answers
+                    show_feedback = True
+                    st.session_state.show_feedback = show_feedback
+
+                    # Check the answer and update score
+                    if selected_option == mcq['answer']:
+                        st.success("Correct!")
+                        score += 1
+                    else:
+                        st.error(f"Wrong! The correct answer is: {mcq['answer']}")
+
+                    st.session_state.score = score
+
+                # Show "Next" button only after feedback is shown
+                if show_feedback:
+                    if st.button("Next", key=f"next_button_{current_question}_{st.session_state.username}") and current_question < len(all_mcqs) - 1:
+                        st.session_state.current_question += 1
+                        st.session_state.show_feedback = False
+                        st.session_state.selected_option = None
+                        st.session_state.selected_answers = selected_answers
+                        st.rerun()
+
+                    # Show "Finish Quiz" button when on the last question
+                    if current_question == len(all_mcqs) - 1:
+                        if st.button("Finish Quiz", key=f"finish_button_{st.session_state.username}"):
+                            handle_quiz_completion(st.session_state.username, "YouTube Quiz", score)
+                            st.session_state.current_question += 1
+                            st.session_state.show_feedback = False
+                            st.session_state.selected_option = None
+                            st.rerun()
+            else:
+                st.write("No questions available. Please generate MCQs from a YouTube video.")
+
+
     with tab3:
         st.header("Quiz Results")
         st.write("This Tab will show the result of your last attempted Quiz with a complete overview.")
- 
+
         # Check if the quiz has been completed and if valid MCQs are present
         if 'all_mcqs' in st.session_state and st.session_state.all_mcqs and st.session_state.current_question >= len(st.session_state.all_mcqs):
             score = st.session_state.get('score', 0)
             total_questions = len(st.session_state.all_mcqs)
             st.write(f"Your score: {score} out of {total_questions}")
- 
+
             # Show full quiz results in a table
             results_data = []
             for idx, mcq in enumerate(st.session_state.all_mcqs):
                 selected_answer = st.session_state.selected_answers[idx] if idx < len(st.session_state.selected_answers) else "Not answered"
                 correct_answer = mcq['answer']
- 
+
                 # Highlight incorrect answers in red and correct answers in green
                 if selected_answer == correct_answer:
                     results_data.append({
@@ -598,26 +638,32 @@ def show_dashboard():
                         "Your Answer": f'<div style="background-color: #f8d7da; color: black;">{selected_answer}</div>',  # Light red
                         "Correct Answer": correct_answer
                     })
- 
+
             # Create a DataFrame
             results_df = pd.DataFrame(results_data)
- 
+
             # Display the results as a DataFrame with custom HTML rendering
             st.markdown(results_df.to_html(escape=False), unsafe_allow_html=True)
- 
+
             # Save the results for the user only if MCQs were generated
             username = st.session_state.get('username')
             if 'uploaded_file' in st.session_state:
-                quiz_title = st.session_state.uploaded_file.name.replace(".pdf", "")
+                # Create a unique quiz title by appending a timestamp to avoid overwriting results
+                quiz_title = f"{st.session_state.uploaded_file.name.replace('.pdf', '')}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
                 save_user_results_login(username, quiz_title, score)  # Save results
                 st.success(f"Results saved for {username} (Quiz: {quiz_title}).")
             else:
                 print("No PDF file found. Please upload a file to save results.")
+
+            # Clear session state after displaying the results to prevent appending issues
+            if 'all_mcqs' in st.session_state:
+                del st.session_state['all_mcqs']
+            if 'selected_answers' in st.session_state:
+                del st.session_state['selected_answers']
         else:
             st.write("Please complete the quiz to see your results.")
- 
- 
- 
+
+
     with tab4:
        
         def display_unique_quiz_results(user_results):
