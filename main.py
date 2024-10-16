@@ -1,12 +1,3 @@
-test_text = """
-welcome back to another machine learning explained video by assembly ai in this video we talk about supervised learning which is arguably the most important type of machine learning you will learn what it means examples of supervised learning or this data and training types of supervised learning and we touch on specific algorithms of supervised learning let's begin with the very basics what does machine learning mean machine learning is a sub-area of artificial intelligence and it's the study of algorithms that give computers the ability to learn and make decisions based on data and not from explicit instructions a popular example is learning to predict whether an email is spam or no spam by reading many different emails of these two types we typically differentiate between three types of machine learning supervised learning unsupervised learning and reinforcement learning in supervised learning the computer learns by making use of labeled data so we know the corresponding label or target of our data an example is again the spam prediction algorithm where we show many different emails to the computer and for each email we know if this was a spam email or not on the other hand in unsupervised learning the computer learns by making use of unlabeled data so we have data but we don't know the corresponding target an example is to cluster books into different categories on the basis of the title and other book information but not by knowing its actual category and then there is also reinforcement learning where so-called intelligent software agents take actions in an environment and automatically try to improve its behavior this usually works with a system of rewards and punishments and popular examples are games for example a computer can learn to be good in the snake game only by playing the game itself and every time
-it eats an apple or it dies it learns from this actions now in this video we are going to focus on supervised learning where we learn from labeled data now what is data data can be any relevant information we collect for our algorithm this can be for example user information like age and gender or text data or images or information within an image like measurements or color information the possibilities are endless here let's look at a concrete example in the popular iris flower data set we want to predict the type of iris flower based on different measurements we have 150 records of flowers with different attributes that have been measured before so for each flower we have the sepal
-length saypal width petal length and petal width these are called the features and we also have the corresponding species this is called the class the label or the target so this is a supervised case where we know the label we can
-represent this table in a mathematical way so we put each feature into a vector this is the feature vector and then we do this for all the different samples and when we do this for all the different samples we end up in a 2d representation which is also called a matrix additionally we can put all labels into one vector this is called the target vector now in supervised learning we take the features and the labels and show it to the computer so that it learns we call this the training step and the data we use is called the training data training is performed by specific algorithms that usually try to minimize an error during this training process and this is done by mathematical optimization methods which i won't go into more detail here after training we want to show new data to the computer that it has never seen before and where we don't know the label this is called our test data and now the trained computer should be able to make a decision based on the information it has seen and determine the correct target value and this is how supervised learning works there are two types of supervised learning classification and regression in classification we predict a discrete class label in the previous flower classification example our target values can only have the values 0 1 and 2 corresponding to the three different classes if we have more than two possible labels like here we call this a multi-class classification problem if we only have two labels usually zero and one is used then we call this a binary classification problem for example spam or no spam on the other hand in regression we try to predict a continuous target value meaning the target value can have a more or less arbitrary value one example is to predict house prices based on given information about the house and the neighborhood the target variable which is the price can basically have any value here now that we know what supervised learning means let's have a look at concrete algorithms i will not explain them in detail here i simply name them so that you have heard of them they all have a unique design and can be different in the way how it stores the information mathematically how it solves the training process through mathematical operations and how it transforms the data this list is not exhaustive but here are 10 algorithms that are nice to know some of them can be used for either regression or classification and some can even be used for both cases popular algorithms are linear regression logistic regression decision trees random forest naive bayes perceptron and multi-layer perceptron support vector machines or short svm k-nearest neighbors or short knn adaboost and neural networks which are part of the deep learning field alright i hope you enjoyed
-this video if you did so then please hit the like button and consider subscribing to the channel also if you want to try assembly ai for free then grab your free api token using the link in the description below and then i hope to
-see you in the next video bye
-"""
-from dotenv import set_key
 import streamlit as st
 import time
 import re
@@ -16,27 +7,15 @@ import os
 import json
 import requests
 from langchain_community.document_loaders import PyPDFLoader
-from youtube_transcript_api import YouTubeTranscriptApi
 from pydantic import BaseModel
 from typing import List
 from tempfile import NamedTemporaryFile
-import time
-import streamlit as st
-from langchain_community.document_loaders import PyPDFLoader
-from youtube_transcript_api import YouTubeTranscriptApi
-import os
-import json
-from pydantic import BaseModel
-from typing import List
 import requests
-import pickle
-import hashlib
-import datetime
 from datetime import datetime
 import pandas as pd
  
 st.set_page_config(page_title="Quizify", page_icon="🧠", layout="wide")
-
+ 
  
  # Initialize session state for user authentication and API settings
 if "authenticated" not in st.session_state:
@@ -47,8 +26,23 @@ if "api_key" not in st.session_state:
     st.session_state.api_key = None
 if "endpoint" not in st.session_state:
     st.session_state.endpoint = None
-
-
+# Initialize session state
+if "current_text" not in st.session_state:
+    st.session_state.current_text = ""
+if "current_question" not in st.session_state:
+    st.session_state.current_question = 0
+if "score" not in st.session_state:
+    st.session_state.score = 0
+if "show_feedback" not in st.session_state:
+    st.session_state.show_feedback = False
+if "selected_option" not in st.session_state:
+    st.session_state.selected_option = None
+if "all_mcqs" not in st.session_state:
+    st.session_state.all_mcqs = []
+if "selected_answers" not in st.session_state:
+    st.session_state.selected_answers = []
+ 
+ 
  
 # Custom CSS for styling
 custom_css = """
@@ -68,7 +62,7 @@ st.markdown(custom_css, unsafe_allow_html=True)
 st.markdown(custom_css, unsafe_allow_html=True)
  
  
-
+ 
  
 # Update file paths to include the Data folder
 DATA_FOLDER = "Data"  # Specify your data folder here
@@ -125,18 +119,16 @@ def show_user_guide():
     If you encounter issues uploading files or generating quizzes, ensure that the PDF is not corrupted and that the YouTube URL is valid.
     For any technical issues, consider refreshing the page or checking your internet connection.
     """)
+ 
 def save_user_results_login(username, quiz_title, score):
     try:
-        user_results = load_user_results(username)  # Load existing results for the user
-        # Store the result, overwriting any existing result for the same quiz title
+        user_results = load_user_results()  # Load existing results
+        # Append new result for the user with a timestamp
         if username not in user_results:
-            user_results[username] = {}
-        user_results[username][quiz_title] = (score, datetime.datetime.now().isoformat())
-        
-        save_users(user_results)  # Save back to file
+            user_results[username] = []
+        user_results[username].append((quiz_title, score, datetime.datetime.now().isoformat()))
     except Exception as e:
         print(f"Error saving user results: {e}")
-
    
  
 # Function to load user quiz results from the pickle file
@@ -213,16 +205,8 @@ def load_quiz_from_pickle(filename):
     try:
         with open(filename, 'rb') as f:
             return pickle.load(f)
-    except FileNotFoundError:
-        print("File not found. Please ensure the filename is correct.")
+    except (FileNotFoundError, EOFError):
         return []
-    except EOFError:
-        print("End of file reached unexpectedly. The file might be empty or corrupted.")
-        return []
-    except pickle.UnpicklingError as e:
-        print(f"Error unpickling the file: {e}")
-        return []
-
  
 headers = {
     'Content-Type': 'application/json',
@@ -244,25 +228,7 @@ class MCQ(BaseModel):
 class List_of_MCQs(BaseModel):
     mcqs: List[MCQ]
    
-# Initialize session state
-if "username" not in st.session_state:
-    st.session_state.username = None
-if "current_text" not in st.session_state:
-    st.session_state.current_text = ""
-if "current_question" not in st.session_state:
-    st.session_state.current_question = 0
-if "score" not in st.session_state:
-    st.session_state.score = 0
-if "show_feedback" not in st.session_state:
-    st.session_state.show_feedback = False
-if "selected_option" not in st.session_state:
-    st.session_state.selected_option = None
-if "all_mcqs" not in st.session_state:
-    st.session_state.all_mcqs = []
-if "selected_answers" not in st.session_state:
-    st.session_state.selected_answers = []
-if "api_validation_status" not in st.session_state:
-    st.session_state.api_validation_status = None  # Track API validation status
+ 
    
  
 def split_text(text, max_length):
@@ -311,6 +277,11 @@ def generate_mcqs_from_text(text):
  
     return all_mcqs
 def get_chat_completion(messages):
+       # Check if API key and endpoint are provided
+    
+    if not st.session_state.get("api_key") and not st.session_state.get("endpoint"):
+        st.error("API Key and/or Endpoint are missing. Please set them in the sidebar.")
+        return None
     data = {
         "messages": messages,
         "temperature": 0.7,
@@ -318,32 +289,32 @@ def get_chat_completion(messages):
     }
  
     response = requests.post(st.session_state.endpoint, headers=headers, data=json.dumps(data))
-    print("get response",response)
- 
     if response.status_code == 200:
         result = response.json()
         return result['choices'][0]['message']['content']
     else:
-        st.error(f"Error: {response.status_code}, {response.text}")
+        st.error(f"Invalid Key . Please set in sidebar")
         return None
+    
+    
  
 # Main Application Logic
 def main():
-    # Sidebar for API configuration
     with st.sidebar:
+   # Add configuration section
         st.subheader("Configuration")
         api_key = st.text_input("Enter API Key:", type="password")
         endpoint = st.text_input("Enter API Endpoint:")
-        
+         
         if st.button("Save API Settings"):
             st.session_state.api_key = api_key
             st.session_state.endpoint = endpoint
             st.success("API settings saved successfully!")
-        
+       
         # Use the stored API key and endpoint for further requests
-        api_key = st.session_state.get('api_key')
-        endpoint = st.session_state.get('endpoint')
-
+        api_key = st.session_state.api_key
+        endpoint = st.session_state.endpoint
+ 
         if api_key and endpoint:
             headers = {
                 'Content-Type': 'application/json',
@@ -351,27 +322,26 @@ def main():
             }
        
         show_user_guide()
-
+ 
+ 
     users = load_users()  # Load users from pickle file
-
+ 
     st.markdown("<h1 class='big-font'>Welcome to Quizify</h1>", unsafe_allow_html=True)
     st.markdown("<p class='subtitle'>Embark on a journey of knowledge with AI-generated quizzes!</p>", unsafe_allow_html=True)
-
+ 
     # Initialize session state for authentication
     if 'authenticated' not in st.session_state:
         st.session_state.authenticated = False
-
+ 
     if st.session_state.authenticated:
         show_dashboard()
     else:
         # Toggle form between login and signup
         if 'show_login' not in st.session_state:
             st.session_state.show_login = True
-
+ 
         if st.session_state.show_login:
             login(users)
-
-
            
            
 def login(users):
@@ -404,8 +374,6 @@ def handle_quiz_completion(username, quiz_title, score):
     save_user_results(username, quiz_title, score)
     st.success(f"Your score for {quiz_title} has been saved.")
  
- 
- 
 def show_dashboard():
     st.success("Welcome back! You're now logged in.")
      # Add a logout button
@@ -415,24 +383,15 @@ def show_dashboard():
         st.success("You have been logged out.")
         st.rerun()  # Rerun the app to show the login/signup form again
  
-    tab1, tab3, tab4, tab5 = st.tabs(["PDF to MCQs",  "Quiz Results", "User Profile", "History"])
-    if 'current_question' not in st.session_state:
-        st.session_state.current_question = 0
-    if 'score' not in st.session_state:
-        st.session_state.score = 0
-    if 'selected_answers' not in st.session_state:
-        st.session_state.selected_answers = []
-    if 'show_feedback' not in st.session_state:
-        st.session_state.show_feedback = False
+    tab1, tab3, tab4, tab5 = st.tabs(["PDF to MCQs", "Quiz Results", "User Profile", "History"])
+ 
     with tab1:
         st.header("PDF to MCQs")
  
         # Uploaded file input
         uploaded_file = st.file_uploader("Upload a PDF file", type=["pdf"])
  
-        # Check if there are existing MCQs and if uploaded file is provided
         if uploaded_file is not None:
-            # Get the file name and set it as the quiz title
             quiz_title = uploaded_file.name.replace(".pdf", "")
             st.subheader(f"Quiz Title: {quiz_title}")
  
@@ -440,49 +399,59 @@ def show_dashboard():
             new_checksum = calculate_checksum(file_bytes)
  
             # Load existing MCQs from pickle file
-            all_mcqs = load_quiz_from_pickle(QUIZ_PICKLE_FILE)  # Implement this function to load from pickle file
-            print(f"Loaded existing MCQs: {len(all_mcqs)} MCQs found.")
+            all_mcqs = load_quiz_from_pickle(QUIZ_PICKLE_FILE)
  
-            # Check if MCQs for this PDF already exist
+            # Reset quiz state when a new PDF is uploaded
+            if 'last_uploaded_file_checksum' not in st.session_state or st.session_state.last_uploaded_file_checksum != new_checksum:
+                st.session_state.current_question = 0
+                st.session_state.selected_answers = []
+                st.session_state.score = 0
+                st.session_state.show_feedback = False
+                st.session_state.last_uploaded_file_checksum = new_checksum
+ 
+            # Check for existing MCQs for this PDF
             existing_mcqs = [mcq for mcq in all_mcqs if mcq.get('checksum') == new_checksum]
+           
             if existing_mcqs:
                 st.warning("MCQs for this PDF already exist.")
                 st.session_state.all_mcqs = existing_mcqs
-                print("1\n")
- 
+               
+                # Show the toast message if not already shown
                 if 'quiz_ready_to_attempt' not in st.session_state:
-                    # Show the toast message
                     st.toast("Quiz is ready to attempt")
-                    # Set the session state variable to True
                     st.session_state.quiz_ready_to_attempt = True
- 
             else:
-                 # Proceed to save the uploaded file and generate new MCQs
-                        with open("uploaded_file.pdf", "wb") as f:
-                            f.write(file_bytes)
+                # Save the uploaded file and generate new MCQs
+                with open("uploaded_file.pdf", "wb") as f:
+                    f.write(file_bytes)
  
-                        pdf_reader = PyPDFLoader("uploaded_file.pdf")
-                        documents = pdf_reader.load()
-                        pdf_text = "\n".join([doc.page_content for doc in documents])
-                        os.remove("uploaded_file.pdf")
+                pdf_reader = PyPDFLoader("uploaded_file.pdf")
+                documents = pdf_reader.load()
+                pdf_text = "\n".join([doc.page_content for doc in documents])
+                os.remove("uploaded_file.pdf")
  
-                        # Generate MCQs from the PDF text
-                        new_mcqs = generate_mcqs_from_text(pdf_text)
-                        if new_mcqs:  # Only proceed if new MCQs were generated
-                            for mcq in new_mcqs:
-                                mcq['checksum'] = new_checksum
+                # Generate MCQs from the PDF text
+                new_mcqs = generate_mcqs_from_text(pdf_text)
+                if new_mcqs:  # Proceed only if new MCQs were generated
+                    for mcq in new_mcqs:
+                        mcq['checksum'] = new_checksum
  
-                            # Append new MCQs to the existing list and save
-                            all_mcqs.extend(new_mcqs)
-                            st.session_state.all_mcqs = list({mcq['question']: mcq for mcq in (all_mcqs + new_mcqs)}.values())
+                    # Clear previous MCQs and set new ones
+                    st.session_state.all_mcqs = new_mcqs
+                   
+                    # Save new MCQs to the pickle file
+                    all_mcqs.extend(new_mcqs)
+                    save_quiz_to_pickle(all_mcqs, QUIZ_PICKLE_FILE)
+                    st.success("Generated and saved MCQs.")
  
-                            save_quiz_to_pickle(all_mcqs, QUIZ_PICKLE_FILE)
-                            st.success("Generated and saved MCQs.")
-                           
-                        else:
-                            st.error("No MCQs were generated from the uploaded PDF.")                          
+                    # Reset quiz state here after new MCQs are generated
+                    st.session_state.current_question = 0
+                    st.session_state.selected_answers = []
+                    st.session_state.score = 0
+                    st.session_state.show_feedback = False
+ 
         # Quiz functionality
-        if st.session_state.all_mcqs:
+        if 'all_mcqs' in st.session_state and st.session_state.all_mcqs:
             all_mcqs = st.session_state.all_mcqs
             current_question = st.session_state.current_question
  
@@ -515,117 +484,32 @@ def show_dashboard():
                 # Show "Finish Quiz" button when on the last question
                 if st.session_state.show_feedback and current_question == len(all_mcqs) - 1:
                     if st.button("Finish Quiz!! Click on Quiz Results Tab to view quiz result"):
-                        # Check if there are any MCQs before completing the quiz
-                        if len(st.session_state.all_mcqs) > 0:
-                            score = st.session_state.score
-                            st.session_state.current_question += 1
-                            st.session_state.show_feedback = False
-                            st.session_state.selected_option = None    
-                            # Call the completion handler only if there are MCQs
-                            handle_quiz_completion(st.session_state.username, quiz_title, score)
-                            st.rerun()
-                           
+                        score = st.session_state.score
+                        st.session_state.current_question += 1
+                        st.session_state.show_feedback = False
+                        st.session_state.selected_option = None    
+                        handle_quiz_completion(st.session_state.username, quiz_title, score)
+                        st.rerun()
         else:
             st.write("Please upload a PDF file to generate MCQs.")
             print("No MCQs available. Prompting user to upload a PDF.")
-
-    # with tab2:
-    #     st.header("YouTube Link Quiz")
-    #     youtube_url = st.text_input("Enter YouTube video URL:")
-
-    #     if youtube_url:
-    #         video_checksum = calculate_checksum_from_string(youtube_url)
-    #         all_mcqs = load_quiz_from_pickle(QUIZ_PICKLE_FILE)
-
-    #         existing_mcqs = [mcq for mcq in all_mcqs if mcq.get('checksum') == video_checksum]
-    #         if existing_mcqs:
-    #             st.warning("MCQs for this YouTube video already exist.")
-    #             st.session_state.all_mcqs = existing_mcqs
-
-    #             if 'quiz_ready_to_attempt' not in st.session_state:
-    #                 st.toast("Quiz is ready to attempt")
-    #                 st.session_state.quiz_ready_to_attempt = True
-
-    #         else:
-    #             transcript_text = get_transcript(youtube_url)
-    #             if transcript_text:
-    #                 st.session_state.current_text = transcript_text
-    #                 new_mcqs = generate_mcqs_from_text(transcript_text)
-    #                 if new_mcqs:
-    #                     for mcq in new_mcqs:
-    #                         mcq['checksum'] = video_checksum
-
-    #                     all_mcqs.extend(new_mcqs)
-    #                     st.session_state.all_mcqs = all_mcqs
-    #                     save_quiz_to_pickle(all_mcqs, QUIZ_PICKLE_FILE)
-    #                     st.success("Generated and saved MCQs for the YouTube video.")
-    #                 else:
-    #                     st.error("No MCQs were generated from the link.")
-
-    # # # # Quiz functionality
-    # # if 'all_mcqs' in st.session_state and st.session_state.all_mcqs:
-    # #     all_mcqs = st.session_state.all_mcqs
-    # #     current_question = st.session_state.current_question
-
-    # #     if current_question < len(all_mcqs):
-    # #         mcq = all_mcqs[current_question]
-
-    # #         st.write(f"**Question {current_question + 1}:** {mcq['question']}")
-    # #         selected_option = st.radio(
-    # #             "Select an option:",
-    # #             mcq['options'],
-    # #             key=f"question_{current_question}_{st.session_state.username}"
-    # #         )
-
-    # #         if st.button("Submit", key=f"submit_button_{current_question}_{st.session_state.username}") and not st.session_state.show_feedback:
-    # #             st.session_state.selected_answers.append(selected_option)
-    # #             st.session_state.show_feedback = True
-
-    # #             # Update score
-    # #             if selected_option == mcq['answer']:
-    # #                 st.success("Correct!")
-    # #                 st.session_state.score += 1
-    # #             else:
-    # #                 st.error(f"Wrong! The correct answer is: {mcq['answer']}")
-
-    # #         # Show "Next" button only after feedback is shown
-    # #         if st.session_state.show_feedback:
-    # #             if st.button("Next", key=f"next_button_{current_question}_{st.session_state.username}"):
-    # #                 st.session_state.current_question += 1
-    # #                 st.session_state.show_feedback = False
-    # #                 st.session_state.selected_option = None
-    # #                 st.session_state.selected_answers = st.session_state.selected_answers
-    # #                 st.rerun()  # Use experimental_rerun instead of rerun
-
-    # #         # Show "Finish Quiz" button when on the last question
-    # #         if current_question == len(all_mcqs) - 1:
-    # #             if st.button("Finish Quiz", key=f"finish_button_{st.session_state.username}"):
-    # #                 handle_quiz_completion(st.session_state.username, "YouTube Quiz", st.session_state.score)
-    # #                 st.session_state.current_question += 1  # Optional, depending on your flow
-    # #                 st.session_state.show_feedback = False
-    # #                 st.session_state.selected_option = None
-    # #                 st.rerun()
-    # #     else:
-    # #         st.write("No questions available. Please generate MCQs from a YouTube video.")
-
-
-
+ 
     with tab3:
         st.header("Quiz Results")
         st.write("This Tab will show the result of your last attempted Quiz with a complete overview.")
-
+ 
         # Check if the quiz has been completed and if valid MCQs are present
         if 'all_mcqs' in st.session_state and st.session_state.all_mcqs and st.session_state.current_question >= len(st.session_state.all_mcqs):
             score = st.session_state.get('score', 0)
             total_questions = len(st.session_state.all_mcqs)
             st.write(f"Your score: {score} out of {total_questions}")
-
+ 
             # Show full quiz results in a table
             results_data = []
             for idx, mcq in enumerate(st.session_state.all_mcqs):
                 selected_answer = st.session_state.selected_answers[idx] if idx < len(st.session_state.selected_answers) else "Not answered"
                 correct_answer = mcq['answer']
-
+ 
                 # Highlight incorrect answers in red and correct answers in green
                 if selected_answer == correct_answer:
                     results_data.append({
@@ -639,32 +523,26 @@ def show_dashboard():
                         "Your Answer": f'<div style="background-color: #f8d7da; color: black;">{selected_answer}</div>',  # Light red
                         "Correct Answer": correct_answer
                     })
-
+ 
             # Create a DataFrame
             results_df = pd.DataFrame(results_data)
-
+ 
             # Display the results as a DataFrame with custom HTML rendering
             st.markdown(results_df.to_html(escape=False), unsafe_allow_html=True)
-
+ 
             # Save the results for the user only if MCQs were generated
             username = st.session_state.get('username')
             if 'uploaded_file' in st.session_state:
-                # Create a unique quiz title by appending a timestamp to avoid overwriting results
-                quiz_title = f"{st.session_state.uploaded_file.name.replace('.pdf', '')}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}"
+                quiz_title = st.session_state.uploaded_file.name.replace(".pdf", "")
                 save_user_results_login(username, quiz_title, score)  # Save results
                 st.success(f"Results saved for {username} (Quiz: {quiz_title}).")
             else:
                 print("No PDF file found. Please upload a file to save results.")
-
-            # Clear session state after displaying the results to prevent appending issues
-            if 'all_mcqs' in st.session_state:
-                del st.session_state['all_mcqs']
-            if 'selected_answers' in st.session_state:
-                del st.session_state['selected_answers']
         else:
             st.write("Please complete the quiz to see your results.")
-
-
+ 
+ 
+ 
     with tab4:
        
         def display_unique_quiz_results(user_results):
@@ -736,32 +614,7 @@ def show_dashboard():
         else:
             st.write("No local quiz results available.")
    
-def get_transcript(youtube_url):
-    """Extract transcript from a YouTube video."""
-    video_id = extract_video_id(youtube_url)
-    if video_id:
-        try:
-            transcript = YouTubeTranscriptApi.get_transcript(video_id)
-            transcript_text = " ".join([entry['text'] for entry in transcript])
-            return transcript_text
-        except Exception as e:
-            st.error(f"Error fetching transcript: {e}")
-            st.info("Using test text instead.")
-            return ""
-    else:
-        st.error("Invalid YouTube URL.")
-        return ""
- 
- 
-def extract_video_id(url):
-    """Extracts the video ID from a YouTube URL."""
-    if "youtube.com/watch?v=" in url:
-        return url.split("youtube.com/watch?v=")[-1]
-    elif "youtu.be/" in url:
-        return url.split("youtu.be/")[-1]
-    return None
  
  
 if __name__ == "__main__":
     main()
- 
